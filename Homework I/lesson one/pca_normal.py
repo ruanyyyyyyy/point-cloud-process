@@ -40,21 +40,8 @@ def draw_pca(w, v, data):
     pc_array = np.asarray(data.points)
     points = np.transpose(pc_array) # 3,1000
 
-    centroid = np.mean(points, axis=1) # 3, 1
-    projs = np.dot(np.transpose(v[:, 0]), points) # 1,1000
-    scale = np.max(projs) - np.min(projs)
-
-    points = centroid + np.vstack(np.asarray([0.0, 0.0,0.0]), scale*np.transpose(v)).tolist()
-    lines = [[0, 1], [0, 2], [0, 3]]
-    # from the largest to the smallest: RGB
-    colors = np.identity(3).tolist()
-
-    # build pca line set:
-    pca_o3d = o3d.geometry.LineSet(
-        points=o3d.utility.Vector3dVector(points),
-        lines=o3d.utility.Vector2iVector(lines),
-    )
-    pca_o3d.colors = o3d.utility.Vector3dVector(colors)
+    new_ax = np.transpose(v[:, :2])
+    pca_o3d = np.dot(new_ax, points)
 
     return pca_o3d
 
@@ -93,7 +80,7 @@ def main():
 
 
     projs = draw_pca(w, v, point_cloud_o3d)
-
+    plt.scatter(projs[0,:], projs[1,:])
 
     plt.show()
     
