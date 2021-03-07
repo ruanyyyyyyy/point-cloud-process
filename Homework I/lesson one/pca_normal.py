@@ -4,6 +4,7 @@ import open3d as o3d
 import os
 import numpy as np
 from pyntcloud import PyntCloud
+import matplotlib.pyplot as plt
 
 # 功能：计算PCA的函数
 # 输入：
@@ -19,7 +20,7 @@ def PCA(data, correlation=False, sort=True):
     pc_array = np.asarray(data.points)
     pc_array = np.transpose(pc_array)
     # normalize by the center
-    pc_mean = np.mean(pc_array, axis=0)
+    pc_mean = np.mean(pc_array, axis=1, keepdims=True)
     pc_norm = pc_array - pc_mean
     # compute SVD
     H = np.cov(pc_norm)
@@ -35,10 +36,31 @@ def PCA(data, correlation=False, sort=True):
 
     return eigenvalues, eigenvectors
 
+def draw_pca(w, v, data):
+    pc_array = np.asarray(data.points)
+    points = np.transpose(pc_array) # 3,1000
+
+    centroid = np.mean(points, axis=1) # 3, 1
+    projs = np.dot(np.transpose(v[:, 0]), points) # 1,1000
+    scale = np.max(projs) - np.min(projs)
+
+    points = centroid + np.vstack(np.asarray([0.0, 0.0,0.0]), scale*np.transpose(v)).tolist()
+    lines = [[0, 1], [0, 2], [0, 3]]
+    # from the largest to the smallest: RGB
+    colors = np.identity(3).tolist()
+
+    # build pca line set:
+    pca_o3d = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(points),
+        lines=o3d.utility.Vector2iVector(lines),
+    )
+    pca_o3d.colors = o3d.utility.Vector3dVector(colors)
+
+    return pca_o3d
 
 def main():
-    # root = "../.."
-    root = "."
+    root = "../.."
+    #root = "."
     shape_names_path = os.path.join(root, "data/modelnet40_shape_names.txt")
     pc_paths = []
     with open(shape_names_path, 'r') as f:
@@ -68,7 +90,14 @@ def main():
     point_cloud_vector = v[:, 0] #点云主方向对应的向量
     print('the main orientation of this pointcloud is: ', point_cloud_vector)
     # TODO: 此处只显示了点云，还没有显示PCA
-    o3d.visualization.draw_geometries([point_cloud_o3d])
+
+
+    projs = draw_pca(w, v, point_cloud_o3d)
+
+
+    plt.show()
+    
+
     
     # # 循环计算每个点的法向量
     # pcd_tree = o3d.geometry.KDTreeFlann(point_cloud_o3d)
