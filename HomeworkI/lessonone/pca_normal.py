@@ -17,8 +17,7 @@ import matplotlib.pyplot as plt
 def PCA(data, correlation=False, sort=True):
     # 作业1
     # 屏蔽开始
-    pc_array = np.asarray(data.points)
-    pc_array = np.transpose(pc_array)
+    pc_array = np.transpose(data)
     # normalize by the center
     pc_mean = np.mean(pc_array, axis=1, keepdims=True)
     pc_norm = pc_array - pc_mean
@@ -37,8 +36,7 @@ def PCA(data, correlation=False, sort=True):
     return eigenvalues, eigenvectors
 
 def draw_pca(w, v, data):
-    pc_array = np.asarray(data.points)
-    points = np.transpose(pc_array) # 3,1000
+    points = np.transpose(data) # 3,1000
 
     new_ax = np.transpose(v[:, :2])
     pca_o3d = np.dot(new_ax, points)
@@ -46,8 +44,8 @@ def draw_pca(w, v, data):
     return pca_o3d
 
 def main():
-    root = "../.."
-    #root = "."
+    # root = "../.."
+    root = "."
     shape_names_path = os.path.join(root, "data/modelnet40_shape_names.txt")
     pc_paths = []
     with open(shape_names_path, 'r') as f:
@@ -66,39 +64,39 @@ def main():
     # 加载原始点云
     point_cloud_pynt = PyntCloud.from_file(pc_path, sep=",", names=["x", "y", "z", "nx", "ny", "nz"])
     point_cloud_o3d = point_cloud_pynt.to_instance("open3d", mesh=False)
-    # o3d.visualization.draw_geometries([point_cloud_o3d]) # 显示原始点云 TODO: check slack
+    pc_array = np.asarray(point_cloud_o3d.points)
+    # o3d.visualization.draw_geometries([point_cloud_o3d]) # 显示原始点云
 
     # 从点云中获取点，只对点进行处理
     points = point_cloud_pynt.points
     print('total points number is:', points.shape[0])
 
     # 用PCA分析点云主方向
-    w, v = PCA(point_cloud_o3d)
+    w, v = PCA(pc_array)
     point_cloud_vector = v[:, 0] #点云主方向对应的向量
     print('the main orientation of this pointcloud is: ', point_cloud_vector)
     # TODO: 此处只显示了点云，还没有显示PCA
 
 
-    projs = draw_pca(w, v, point_cloud_o3d)
-    plt.scatter(projs[0,:], projs[1,:])
+    projs = draw_pca(w, v, pc_array)
+    # plt.scatter(projs[0,:], projs[1,:])
+    # plt.show()
 
-    plt.show()
-    
-
-    
-    # # 循环计算每个点的法向量
-    # pcd_tree = o3d.geometry.KDTreeFlann(point_cloud_o3d)
-    # normals = []
-    # # 作业2
-    # # 屏蔽开始
-
-    # # 由于最近邻搜索是第二章的内容，所以此处允许直接调用open3d中的函数
-
-    # # 屏蔽结束
-    # normals = np.array(normals, dtype=np.float64)
-    # # TODO: 此处把法向量存放在了normals中
-    # point_cloud_o3d.normals = o3d.utility.Vector3dVector(normals)
-    # o3d.visualization.draw_geometries([point_cloud_o3d])
+    # 循环计算每个点的法向量
+    pcd_tree = o3d.geometry.KDTreeFlann(point_cloud_o3d)
+    normals = []
+    # 作业2
+    # 屏蔽开始
+    # 由于最近邻搜索是第二章的内容，所以此处允许直接调用open3d中的函数
+    for i in range(len(point_cloud_o3d.points)):
+        [k, idx, _] = pcd_tree.search_knn_vector_3d(point_cloud_o3d.points[i], 5)
+        w, v = PCA(pc_array[idx, :])
+        normals.append(v[:,2])
+    # 屏蔽结束
+    normals = np.array(normals, dtype=np.float64)
+    # TODO: 此处把法向量存放在了normals中, when normalize, press n to show the normals!
+    point_cloud_o3d.normals = o3d.utility.Vector3dVector(normals)
+    o3d.visualization.draw_geometries([point_cloud_o3d])
 
 
 if __name__ == '__main__':
