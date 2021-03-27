@@ -17,6 +17,7 @@ from itertools import cycle, islice
 
 from KMeans import K_Means
 from GMM import GMM
+from spectral_clustering import spetral_clustering
 
 np.random.seed(0)
 
@@ -105,6 +106,7 @@ for i_dataset, (dataset, algo_params) in enumerate(datasets):
     # 自编的K-Means、GMM算法
     my_kmeans = K_Means(n_clusters=params['n_clusters'])
     my_gmm = GMM(n_clusters=params['n_clusters'])
+    my_spectral = spetral_clustering(n_clusters=params['n_clusters'])
     # sklearn中自带的算法
     ms = cluster.MeanShift(bandwidth=bandwidth, bin_seeding=True)
     two_means = cluster.MiniBatchKMeans(n_clusters=params['n_clusters'])
@@ -130,6 +132,7 @@ for i_dataset, (dataset, algo_params) in enumerate(datasets):
     clustering_algorithms = (
         ('My_KMeans', my_kmeans),
         ('My_GMM', my_gmm),
+        ('My_spec', my_spectral),
         ('MiniBatchKMeans', two_means),
         ('AffinityPropagation', affinity_propagation),
         ('MeanShift', ms),
