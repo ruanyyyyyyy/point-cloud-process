@@ -11,33 +11,67 @@ from scipy.stats import multivariate_normal
 plt.style.use('seaborn')
 
 class GMM(object):
-    def __init__(self, n_clusters, max_iter=50):
+    def __init__(self, n_clusters, max_iter=50, tol=0.001):
         self.n_clusters = n_clusters
         self.max_iter = max_iter
-    
-    # 屏蔽开始
-    # 更新W
-    
 
-    # 更新pi
- 
-        
-    # 更新Mu
-
-
-    # 更新Var
-
-
-    # 屏蔽结束
+        self.means = None # (k, dim)
+        self.covs = None # (k, dim, dim)
+        self.weights = np.ones((n_clusters,1))/n_clusters
+        self.tol = tol
     
     def fit(self, data):
         # 作业3
-        
+        dim = data.shape[1]
+        self.means = np.random.random((self.n_clusters, dim))
+        self.covs = np.array(self.n_clusters * [np.identity(dim)])
+        last_nll = float("inf")
+
+        for _ in range(self.max_iter):
+            ### E-step, cal gamma
+            gamma = np.empty((self.n_clusters, data.shape[0])) # (k, N)
+            for i in range(self.n_clusters):
+                gamma[i, :] = multivariate_normal.pdf(data, mean=self.means[i], cov=self.covs[i])
+            gamma = gamma * self.weights # (k, N) x (k, 1)
+            gamma = gamma / np.sum(gamma, axis=0, keepdims=True) # (k, N) / (1, N)
+
+            ### M-step
+            N_k = np.sum(gamma, axis=1, keepdims=True) # (k, 1)
+            ## update mu
+            self.means = np.matmul(gamma, data)/N_k # (k, N) * (N, dim)/(k, 1) = (k, dim)
+            ## update Var
+            diff_xu = (data[np.newaxis,...]-self.means[:,np.newaxis,:])[..., np.newaxis] #(1, N, dim) - (k, 1, dim) = (k, N, dim)-> (k,N,dim,1) only dim=1 can be broadcast!
+            diff_T = np.transpose(diff_xu, (0,1,3,2)) #(k,N,1,dim)
+            diff_mul = np.matmul(diff_xu, diff_T)
+            self.covs = (np.sum(gamma[..., np.newaxis,  np.newaxis]* diff_mul, axis=1))/N_k[...,np.newaxis]  
+            # (k,N,dim,1) * (k,N,1,dim) = (k,N,dim,dim)
+            # (k,N,1,1) .* (k,N,dim,dim) = (k,N,dim,dim)
+            # sum = (k, dim, dim)
+            # N_k->(k,1,1) (k,dim,dim)-(k,1,1)=(k,dim,dim)
+            # matmul: Stacks of matrices are broadcast together. So should use matmul for matrix instead of dot
+
+            ## update pi
+            self.weights = N_k / data.shape[0]
+
+            # negative log likelihood
+            gamma = np.empty((self.n_clusters, data.shape[0])) # (k, N)
+            for i in range(self.n_clusters):
+                gamma[i, :] = multivariate_normal.pdf(data, mean=self.means[i], cov=self.covs[i])
+            gamma = gamma * self.weights # (k,N)
+            nll = -np.sum(np.log(np.sum(gamma, axis=0)))
+            if last_nll - nll < self.tol:
+                break
+            last_nll = nll 
     
     def predict(self, data):
         # 屏蔽开始
-
+        gamma = np.empty((self.n_clusters, data.shape[0])) # (k, N)
+        for i in range(self.n_clusters):
+            gamma[i, :] = multivariate_normal.pdf(data, mean=self.means[i], cov=self.covs[i])
+        gamma = gamma * self.weights # (k,N)
+        return np.argmax(gamma, axis=0)
         # 屏蔽结束
+        return
 
 # 生成仿真数据
 def generate_X(true_Mu, true_Var):
