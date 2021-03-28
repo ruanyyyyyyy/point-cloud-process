@@ -5,7 +5,7 @@ import numpy.linalg as LA
 from sklearn.cluster import KMeans
 
 class spetral_clustering(object):
-    def __init__(self, n_clusters=2, nnk=3, normalized=True):
+    def __init__(self, n_clusters=2, nnk=7, normalized=True):
         self.n_clusters=n_clusters
         self.nnk_ = nnk
         self.labels_ = np.empty(0)
@@ -37,7 +37,7 @@ class spetral_clustering(object):
         eigvals, eigvecs = LA.eig(L)
         sorted_idx = np.argsort(eigvals)
         V = eigvecs[:, sorted_idx[:self.n_clusters]] # (n,k)
-        V = V.real #TODO:
+        V = V.real #TODO: eigvecs would have complex number which kmeans cannot handle. pick the real part. Not sure if this solution is correct.
 
         self.labels_ = KMeans(n_clusters=self.n_clusters).fit_predict(V)
     
