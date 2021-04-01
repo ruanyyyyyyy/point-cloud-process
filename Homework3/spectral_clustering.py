@@ -37,7 +37,8 @@ class spetral_clustering(object):
         eigvals, eigvecs = LA.eig(L)
         sorted_idx = np.argsort(eigvals)
         V = eigvecs[:, sorted_idx[:self.n_clusters]] # (n,k)
-        V = V.real #TODO: eigvecs would have complex number which kmeans cannot handle. pick the real part. Not sure if this solution is correct.
+        # V = V.real #TODO: when k is small, eigvecs would have complex number which kmeans cannot handle. pick the real part. Not sure if this solution is correct.
+        # show V, it has xxx+0.0j, imaginery part is zero. may be imported by numpy?
 
         self.labels_ = KMeans(n_clusters=self.n_clusters).fit_predict(V)
     
