@@ -42,7 +42,7 @@ class ModelNet40Cls(data.Dataset):
             if download and not os.path.exists(self.data_dir):
                 zipfile = os.path.join(BASE_DIR, os.path.basename(self.url))
                 subprocess.check_call(
-                    shlex.split("curl {} -o {}".format(self.url, zipfile))
+                    shlex.split("curl {} -o {} --insecure".format(self.url, zipfile))
                 )
 
                 subprocess.check_call(
