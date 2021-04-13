@@ -21,7 +21,7 @@ global_step = 0
 show_every = 1
 val_every = 3
 date = datetime.date.today()
-save_dir = "../output"
+save_dir = "./output"
 
 
 def save_ckp(ckp_dir, model, optimizer, epoch, best_acc, date):
@@ -67,11 +67,11 @@ def get_eval_acc_results(model, data_loader, device):
             out = model(x)
 
             # TODO: get pred_y from out
-            pred_y = criterion(out, y)
+            pred_y = np.argmax(out.cpu().detach().numpy(), axis=1)
             gt = np.argmax(y.cpu().numpy(), axis=1)
 
             # TODO: calculate acc from pred_y and gt
-            acc = None
+            acc = np.sum(pred_y==gt) / len(y)
             gt_ys = np.append(gt_ys, gt)
             pred_ys = np.append(pred_ys, pred_y)
             idx = gt
@@ -124,21 +124,20 @@ if __name__ == "__main__":
             # TODO: update network's param
             optimizer.step()
         
-            acc_loss += batch_size * loss.item()
+            acc_loss += batch_size * loss.item() 
             num_samples += y.shape[0]
             global_step += 1
             acc = np.sum(np.argmax(out.cpu().detach().numpy(), axis=1) == np.argmax(y.cpu().detach().numpy(), axis=1)) / len(y)
             # print('acc: ', acc)
             if (global_step + 1) % show_every == 0:
-            # ...log the running loss
-            writer.add_scalar('training loss', acc_loss / num_samples, global_step)
-            writer.add_scalar('training acc', acc, global_step)
-            # print( f"loss at epoch {epoch} step {global_step}:{loss.item():3f}, lr:{optimizer.state_dict()['param_groups'][0]['lr']: .6f}, time:{time.time() - start_tic: 4f}sec")
+                # ...log the running loss
+                writer.add_scalar('training loss', acc_loss / num_samples, global_step) 
+                writer.add_scalar('training acc', acc, global_step)
+                # print( f"loss at epoch {epoch} step {global_step}:{loss.item():3f}, lr:{optimizer.state_dict()['param_groups'][0]['lr']: .6f}, time:{time.time() - start_tic: 4f}sec")
         scheduler.step()
         print(f"loss at epoch {epoch}:{acc_loss / num_samples:.3f}, lr:{optimizer.state_dict()['param_groups'][0]['lr']: .6f}, time:{time.time() - start_tic: 4f}sec")
         
         if (epoch + 1) % val_every == 0:
-            
             acc = get_eval_acc_results(model, val_loader, device)
             print("eval at epoch[" + str(epoch) + f"] acc[{acc:3f}]")
             writer.add_scalar('validing acc', acc, global_step)
@@ -146,7 +145,6 @@ if __name__ == "__main__":
             if acc > best_acc:
                 best_acc = acc
                 save_ckp(save_dir, model, optimizer, epoch, best_acc, date)
-
-            example = torch.randn(1, 3, 10000).to(device)
-            traced_script_module = torch.jit.trace(model, example)
-            traced_script_module.save("../output/traced_model.pt")
+                example = torch.randn(1, 3, 10000).to(device)
+                traced_script_module = torch.jit.trace(model, example)
+                traced_script_module.save("../output/traced_model.pt")
