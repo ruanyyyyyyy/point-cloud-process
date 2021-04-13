@@ -4,6 +4,8 @@ import json
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import numpy as np
+import math
+import random
 
 
 def read_pcd_from_file(file):
@@ -47,8 +49,15 @@ class PointNetDataset(Dataset):
     feature, label = self._features[idx], self._labels[idx]
     
     # TODO: normalize feature
+    meanfeat = np.mean(feature, axis=0)
+    feature = feature - meanfeat
     
     # TODO: rotation to feature
+    theta = random.random() * math.pi * 2
+    Rz = np.array([ [math.cos(theta), -math.sin(theta), 0],
+           [math.sin(theta), math.cos(theta), 0],
+           [0, 0, 1] ])
+    feature = np.transpose(np.matmul(Rz, np.transpose(feature)))
 
     # jitter
     feature += np.random.normal(0, 0.02, size=feature.shape)
@@ -74,7 +83,7 @@ class PointNetDataset(Dataset):
         self._classes = read_file_names_from_file(root_dir + '/' + f)
     tmp_classes = []
     for file in files:
-      num = file.split("_")[-1]
+      num = file.split("_")[-1] # airplane_0001
       kind = file.split("_" + num)[0]
       if kind not in tmp_classes:
         tmp_classes.append(kind)
@@ -84,7 +93,7 @@ class PointNetDataset(Dataset):
       self._features.append(np_pts)
       self._labels.append(kind)
     if self._train == 0:
-      print("There are " + str(len(self._labels)) + " trian files.")
+      print("There are " + str(len(self._labels)) + " trian files.") # 9843
     elif self._train == 1:
       print("There are " + str(len(self._labels)) + " test files.")
       
