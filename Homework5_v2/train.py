@@ -68,7 +68,7 @@ def get_eval_acc_results(model, data_loader, device):
 
             # TODO: get pred_y from out
             pred_y = np.argmax(out.cpu().detach().numpy(), axis=1)
-            gt = np.argmax(y.cpu().numpy(), axis=1)
+            gt = np.argmax(y.cpu().numpy())
 
             # TODO: calculate acc from pred_y and gt
             acc = np.sum(pred_y==gt) / len(y)
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             acc_loss += batch_size * loss.item() 
             num_samples += y.shape[0]
             global_step += 1
-            acc = np.sum(np.argmax(out.cpu().detach().numpy(), axis=1) == np.argmax(y.cpu().detach().numpy(), axis=1)) / len(y)
+            acc = np.sum(np.argmax(out.cpu().detach().numpy(), axis=1) == np.argmax(y.cpu().detach().numpy())) / len(y)
             # print('acc: ', acc)
             if (global_step + 1) % show_every == 0:
                 # ...log the running loss
@@ -147,4 +147,4 @@ if __name__ == "__main__":
                 save_ckp(save_dir, model, optimizer, epoch, best_acc, date)
                 example = torch.randn(1, 3, 10000).to(device)
                 traced_script_module = torch.jit.trace(model, example)
-                traced_script_module.save("../output/traced_model.pt")
+                traced_script_module.save("./output/traced_model.pt")
