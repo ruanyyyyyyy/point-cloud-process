@@ -45,7 +45,7 @@ if __name__ == "__main__":
             # TODO: get pred_y from out
             pred_y = np.argmax(out.cpu().detach().numpy(), axis = 1)
 
-            gt = np.argmax(y.cpu().numpy(), axis=1)
+            gt = y.cpu().numpy()
             print("pred[" + str(pred_y)+"] gt[" + str(gt) + "]")
 
             # TODO: calculate acc from pred_y and gt

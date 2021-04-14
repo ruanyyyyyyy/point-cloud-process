@@ -12,7 +12,7 @@ from model import PointNet
 
 SEED = 13
 batch_size = 32
-epochs = 100
+epochs = 150
 decay_lr_factor = 0.95
 decay_lr_every = 2
 lr = 0.01
@@ -24,11 +24,14 @@ date = datetime.date.today()
 save_dir = "./output"
 
 
-def save_ckp(ckp_dir, model, optimizer, epoch, best_acc, date):
+def save_ckp(ckp_dir, model, optimizer, scheduler, epoch, global_step, best_acc, date):
     os.makedirs(ckp_dir, exist_ok=True)
     state = {
         'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict()
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'global_step': global_step,
+        'best_acc': best_acc
         }
     ckp_path = os.path.join(ckp_dir, f'date_{date}-epoch_{epoch}-maxacc_{best_acc:.3f}.pth')
     torch.save(state, ckp_path)
@@ -41,8 +44,6 @@ def load_ckp(ckp_path, model, optimizer):
     model.load_state_dict(state['state_dict'])
     optimizer.load_state_dict(state['optimizer'])
     print("model load from %s" % ckp_path)
-
-
 
 
 def get_eval_acc_results(model, data_loader, device):
@@ -68,7 +69,7 @@ def get_eval_acc_results(model, data_loader, device):
 
             # TODO: get pred_y from out
             pred_y = np.argmax(out.cpu().detach().numpy(), axis=1)
-            gt = np.argmax(y.cpu().numpy())
+            gt = y.cpu().numpy()
 
             # TODO: calculate acc from pred_y and gt
             acc = np.sum(pred_y==gt) / len(y)
@@ -92,14 +93,25 @@ if __name__ == "__main__":
     val_data = PointNetDataset("./dataset/modelnet40_normal_resampled/", train=1)
     val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=True)
     print("Set model and optimizer...")
-    model = PointNet().to(device=device)
+    model = PointNet().to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.StepLR(
           optimizer, step_size=decay_lr_every, gamma=decay_lr_factor)
-
     criterion = torch.nn.NLLLoss()
-
     best_acc = 0.0
+
+    ckp_path = './output/latest.pth'
+    if os.path.exists(ckp_path):
+        print("load existing checkpoint")
+        #  load the checkpoint directly in cuda
+        ckpt = torch.load(ckp_path, map_location=device)
+        model.load_state_dict(ckpt['state_dict'])
+        optimizer.load_state_dict(ckpt['optimizer'])
+        scheduler.load_state_dict(ckpt['scheduler'])
+        global_step = ckpt['global_step']
+        best_acc = ckpt['best_acc']
+
+
     model.train()
     print("Start trainning...")
     for epoch in range(epochs):
@@ -127,7 +139,7 @@ if __name__ == "__main__":
             acc_loss += batch_size * loss.item() 
             num_samples += y.shape[0]
             global_step += 1
-            acc = np.sum(np.argmax(out.cpu().detach().numpy(), axis=1) == np.argmax(y.cpu().detach().numpy())) / len(y)
+            acc = np.sum(np.argmax(out.cpu().detach().numpy(), axis=1) == y.cpu().detach().numpy()) / len(y)
             # print('acc: ', acc)
             if (global_step + 1) % show_every == 0:
                 # ...log the running loss
@@ -144,7 +156,7 @@ if __name__ == "__main__":
 
             if acc > best_acc:
                 best_acc = acc
-                save_ckp(save_dir, model, optimizer, epoch, best_acc, date)
-                example = torch.randn(1, 3, 10000).to(device)
-                traced_script_module = torch.jit.trace(model, example)
-                traced_script_module.save("./output/traced_model.pt")
+                save_ckp(save_dir, model, optimizer, scheduler, epoch, global_step, best_acc, date)
+                # example = torch.randn(1, 3, 10000).to(device)
+                # traced_script_module = torch.jit.trace(model, example)
+                # traced_script_module.save("./output/traced_model.pt")
