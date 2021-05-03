@@ -8,4 +8,4 @@ python setup.py install
 cd ../roipool3d/
 python setup.py install
 
-cd ../../../tools
+cd ../../../scripts

@@ -7,6 +7,7 @@ All the codes are tested in the following environment:
 - Linux (tested on Ubuntu 20.04)
 - Python 3.7
 - PyTorch 1.8.1
+- cuda 11.2
 
 ## Install PointRCNN
 
