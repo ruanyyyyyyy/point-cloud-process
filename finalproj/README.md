@@ -23,3 +23,6 @@ b. Install the dependent python libraries like easydict,tqdm, tensorboardX etc.
 c. Build and install the pointnet2_lib, iou3d, roipool3d libraries by executing the following command:
 
 `sh build_and_install.sh`
+
+# References:
+PointRCNN https://github.com/sshaoshuai/PointRCNN
