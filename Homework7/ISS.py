@@ -17,10 +17,10 @@ def readModelNet40(path):
 if __name__=="__main__":
     ### hyperparameters
     # the distance of a point
-    radius = 0.2
+    radius = 0.5
     # determine if each point is key point
     lambda21 = 0.5
-    lambda32 = 0.4
+    lambda32 = 0.5
     # NMS radius
     non_max_radius = 0.5
     # the upper limit of iss points
@@ -32,7 +32,7 @@ if __name__=="__main__":
     path_plane = "modelnet40_normal_resampled/airplane/airplane_0001.txt"
     path_sofa = "modelnet40_normal_resampled/sofa/sofa_0001.txt"
 
-    points = readModelNet40(path_sofa)
+    points = readModelNet40(path_chair)
     point_tree = spatial.cKDTree(points[:,:3])
     cand_idx = []
     lambda3_idx = {}
