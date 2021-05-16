@@ -5,11 +5,12 @@ from sklearn.neighbors import KDTree
 
 B = 11
 
-def FPFH(data, point_label, tree, radius, B):
+def FPFH(dataWnormal, point_label, tree, radius, B):
+    data = dataWnormal[:, :3]
     nei_hist, count = 0, 0
     nei_labels = tree.query_radius(data[point_label].reshape(1,-1), radius)[0]
     nei_labels = np.asarray(list(set(nei_labels) - set([point_label]))) # delete key point in neighbors
-    histograms = SPFH(data, point_label, tree, radius, B).astype(np.double)
+    histograms = SPFH(dataWnormal, point_label, tree, radius, B).astype(np.double)
     for neighbor_label in nei_labels:
         count += 1
         #TODO: weighted sum, calculate nei_hist
@@ -61,16 +62,12 @@ def SPFH(data_Wnormal, point_label, tree, radius, B):
 
 
 
-if __file__=="__main__":
+if __name__=="__main__":
     pc_path = "./data/chair/chair_0852.txt"
     point_cloud_pynt = PyntCloud.from_file(pc_path, sep=",", names=["x", "y", "z", "nx", "ny", "nz"])
     point_cloud_o3d = point_cloud_pynt.to_instance("open3d", mesh=False)
     pc_array = np.asarray(point_cloud_o3d.points)
     # o3d.visualization.draw_geometries([point_cloud_o3d]) 
 
-    # 从点云中获取点，只对点进行处理
-    points = point_cloud_pynt.points
-    print('total points number is:', points.shape[0])
-
-    tree = KDTree(np.array(points), leaf_size = 20)
-    histograms = FPFH(points, 1, tree, 1.0, B)
+    tree = KDTree(pc_array[:,:3], leaf_size = 20)
+    histograms = FPFH(pc_array, 1, tree, 1.0, B)
