@@ -1,6 +1,7 @@
 import numpy as np
 import open3d as o3d 
 from pyntcloud import PyntCloud
+from sklearn.neighbors import KDTree
 
 B = 11
 
@@ -70,3 +71,6 @@ if __file__=="__main__":
     # 从点云中获取点，只对点进行处理
     points = point_cloud_pynt.points
     print('total points number is:', points.shape[0])
+
+    tree = KDTree(np.array(points), leaf_size = 20)
+    histograms = FPFH(points, 1, tree, 1.0, B)
