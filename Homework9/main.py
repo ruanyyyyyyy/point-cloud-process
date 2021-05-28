@@ -82,7 +82,7 @@ def execute_global_registration(source_down, target_down, source_fpfh,
         ], o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999)) 
     return result
 
-#TODO: implement it 
+
 def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
     distance_threshold = voxel_size * 0.4
     print(":: Point-to-plane ICP registration is applied on original point")
@@ -92,6 +92,66 @@ def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
         source, target, distance_threshold, result_ransac.transformation,
         o3d.pipelines.registration.TransformationEstimationPointToPlane())
     return result
+
+def icp(source, target, transformation, voxel_size):
+    radius_feature = voxel_size * 5  
+    source = source.transform(transformation)
+    source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+        source,
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+    target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+        target,
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+    # for each point p_i find the nearest neighbor in Q
+    target_tree = o3d.geometry.KDTreeFlann(target_fpfh) # 33, 604
+    src_points = np.asarray(source.points) # 20000, 3
+    pairs = []
+    for i in range(len(src_points)):
+        [k, idx, _] = target_tree.search_knn_vector_xd(source_fpfh.data[:,i].reshape(33,1), 2) # the first is the anchor point
+        
+        pairs.append([i, idx[1]])
+    pairs = np.asarray(pairs)
+
+    # calculate A, b 
+    N = len(pairs)
+    q_normals = np.asarray(target.normals) # N,3
+    n_ix, n_iy, n_iz = q_normals[:, 0, None], q_normals[:, 1, None], q_normals[:,2, None]
+    p_points = np.asarray(source.points)
+    p_ix, p_iy, p_iz = p_points[:, 0, None], p_points[:, 1, None], p_points[:, 2, None]
+    q_points = np.asarray(target.points)
+    q_ix, q_iy, q_iz = q_points[:, 0, None], q_points[:, 1, None], q_points[:, 2, None]
+
+    
+    A0= n_iz[pairs[:,1]] * p_iy[pairs[:,0]] - n_iy[pairs[:, 1]]*p_iz[pairs[:,0]]
+    A1 = n_ix[pairs[:,1]] * p_iz[pairs[:,0]] - n_iz[pairs[:, 1]]*p_ix[pairs[:,0]]
+    A2 = n_iy[pairs[:,1]] * p_iz[pairs[:,0]] - n_ix[pairs[:, 1]]*p_iy[pairs[:,0]]
+    A3 = n_ix[pairs[:, 1]]
+    A4 = n_iy[pairs[:, 1]]
+    A5 = n_iz[pairs[:, 1]]
+    A = np.concatenate((A0, A1, A2, A3, A4, A5), axis = 1)
+
+    b = np.zeros((N, 1))
+    b = n_ix[pairs[:, 1]] * q_ix[pairs[:, 1]] + n_iy[pairs[:, 1]] * q_iy[pairs[:, 1]] + n_iz[pairs[:, 1]] * q_iz[pairs[:, 1]] - n_ix[pairs[:, 1]] * p_ix[pairs[:,0]] - n_iy[pairs[:, 1]] * p_iy[pairs[:,0]] - n_iz[pairs[:, 1]] * p_iz[pairs[:,0]]
+
+    # calculate x_hat
+    x_hat = np.matmul(np.linalg.inv(np.matmul(np.transpose(A), A)), np.transpose(A))
+    x_hat = np.matmul(x_hat, b) # 6,1
+
+    # calculate R,t from x_hat
+    R = [[1, x_hat[2], x_hat[1]], 
+         [-x_hat[2], 1, x_hat[0]],
+         [-x_hat[1], x_hat[0], 1]]
+    t = [x_hat[3], x_hat[4], x_hat[5]]
+
+    # Check converge
+    dic = {"R":R, "t":t}
+    transform = np.array([[1, x_hat[2], x_hat[1], x_hat[3]], 
+         [-x_hat[2], 1, x_hat[0], x_hat[4]],
+         [-x_hat[1], x_hat[0], 1, x_hat[5]],
+         [0, 0, 0, 1]])
+    return transform
+        
+
 
 
 if __name__=="__main__":
@@ -104,13 +164,13 @@ if __name__=="__main__":
     #     if i < 4:
     #         continue
     if True:
-        i = 6
+        i = 10
         line = lines[i].split(',')
         src, trg = line[0], line[1]
         path_src = os.path.join(root, src+".bin")
         path_trg = os.path.join(root, trg+".bin")
 
-        voxel_size = 2.0  # means 70cm for the dataset
+        voxel_size = 2.0  # means 2m for the dataset
         source, target, source_down, target_down, source_fpfh, target_fpfh = \
                 prepare_dataset(path_src, path_trg, voxel_size)
 
@@ -121,8 +181,10 @@ if __name__=="__main__":
         draw_registration_result(source_down, target_down, result_ransac.transformation)
 
         # Global registration is performed on a heavily down-sampled point cloud. Then use Point-to-plane ICp to further refine the alignment
-        result_icp = refine_registration(source, target, source_fpfh, target_fpfh,
-                                 voxel_size)
+        # result_icp = refine_registration(source, target, source_fpfh, target_fpfh,
+                                #  voxel_size)
+        # print(result_icp)
+        # draw_registration_result(source, target, result_icp.transformation)
+        result_icp = icp(source, target, result_ransac.transformation, voxel_size)
         print(result_icp)
-        draw_registration_result(source, target, result_icp.transformation)
-        
+        draw_registration_result(source, target, result_icp)
