@@ -217,6 +217,6 @@ if __name__=="__main__":
 
         
 
-    np.savetxt('reg_result.txt', result, delimiter=',', 
+    np.savetxt('registration_dataset/reg_result.txt', result, delimiter=',', 
                 header="idx1,idx2,t_x,t_y,t_z,q_w,q_x,q_y,q_z",
                 fmt='%i,%i,%f,%f,%f,%f,%f,%f,%f')
