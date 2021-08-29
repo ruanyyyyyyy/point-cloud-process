@@ -1,5 +1,0 @@
-# ninja log v5
-0	501	1620002648345695940	/local-scratch/yuer/projects/PointRCNN/lib/utils/roipool3d/build/temp.linux-x86_64-3.7/src/roipool3d_kernel.o	60f0561ad8650457
-0	12692	1620002660529626237	/local-scratch/yuer/projects/PointRCNN/lib/utils/roipool3d/build/temp.linux-x86_64-3.7/src/roipool3d.o	3ec9ffcf11bd7410
-1	498	1620005167059299440	/local-scratch/yuer/projects/pc_asgn/finalproj/lib/utils/roipool3d/build/temp.linux-x86_64-3.7/src/roipool3d_kernel.o	6df8d72288d5de7b
-0	13029	1620005179587227881	/local-scratch/yuer/projects/pc_asgn/finalproj/lib/utils/roipool3d/build/temp.linux-x86_64-3.7/src/roipool3d.o	177f7edd3438df04

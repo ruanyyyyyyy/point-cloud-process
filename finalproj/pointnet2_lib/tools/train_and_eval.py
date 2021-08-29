@@ -1,4 +1,4 @@
-import _init_path
+import pointnet2_lib.tools._init_path
 import numpy as np
 import os
 import torch
@@ -8,7 +8,7 @@ import torch.optim.lr_scheduler as lr_sched
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 import tensorboard_logger as tb_log
-from dataset import KittiDataset
+from pointnet2_lib.tools.dataset import KittiDataset
 import argparse
 import importlib
 

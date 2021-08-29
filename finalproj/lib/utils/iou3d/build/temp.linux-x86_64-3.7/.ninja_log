@@ -1,5 +1,0 @@
-# ninja log v5
-0	1430	1620002635341770335	/local-scratch/yuer/projects/PointRCNN/lib/utils/iou3d/build/temp.linux-x86_64-3.7/src/iou3d_kernel.o	54f1b06a45efe085
-0	12623	1620002646529706329	/local-scratch/yuer/projects/PointRCNN/lib/utils/iou3d/build/temp.linux-x86_64-3.7/src/iou3d.o	16d7d7a518d61ae9
-0	1430	1620005153623376184	/local-scratch/yuer/projects/pc_asgn/finalproj/lib/utils/iou3d/build/temp.linux-x86_64-3.7/src/iou3d_kernel.o	758516550b50bd97
-0	12965	1620005165155310315	/local-scratch/yuer/projects/pc_asgn/finalproj/lib/utils/iou3d/build/temp.linux-x86_64-3.7/src/iou3d.o	42601b2e54676660
