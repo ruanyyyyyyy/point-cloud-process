@@ -4,20 +4,20 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.optim.lr_scheduler as lr_sched
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../'))
-from pointnet2_lib.tools.resampled_dataset import KITTIPCDClsDataset_Wrapper
-import pointnet2
+from data.resampled_dataset import KITTIPCDClsDataset_Wrapper
+from models.pointnet2_msg_cls import PointNet2ClassificationMSG
 import argparse
 import importlib
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sn
 import matplotlib.pyplot as plt
+import torch.optim.lr_scheduler as lr_sched
 
 parser = argparse.ArgumentParser(description="Arg parser")
 parser.add_argument("--batch_size", type=int, default=8)
@@ -29,18 +29,58 @@ parser.add_argument("--ckpt", type=str, default='None')
 
 parser.add_argument("--net", type=str, default='pointnet2_msg_cls')
 
-parser.add_argument('--lr', type=float, default=0.002)
-parser.add_argument('--lr_decay', type=float, default=0.2)
-parser.add_argument('--lr_clip', type=float, default=0.000001)
-parser.add_argument('--decay_step_list', type=list, default=[50, 70, 80, 90])
-parser.add_argument('--weight_decay', type=float, default=0.001)
+parser.add_argument('--lr', type=float, default=0.003)
+parser.add_argument('--lr_decay', type=float, default=0.7)
+parser.add_argument('--bn_momentum', type=float, default=0.5)
+parser.add_argument('--bnm_decay', type=float, default=0.5)
+parser.add_argument('--decay_step', type=float, default=2e4)
+
+parser.add_argument('--weight_decay', type=float, default=0.0)
 
 parser.add_argument("--output_dir", type=str, default='../output')
 parser.add_argument("--extra_tag", type=str, default='default')
 
+parser.add_argument("--resume", type=str, default='false')
+
 args = parser.parse_args()
 
 FG_THRESH = 0.3
+
+def set_bn_momentum_default(bn_momentum):
+    def fn(m):
+        if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+            m.momentum = bn_momentum
+
+    return fn
+
+
+class BNMomentumScheduler(lr_sched.LambdaLR):
+    def __init__(self, model, bn_lambda, last_epoch=-1, setter=set_bn_momentum_default):
+        if not isinstance(model, nn.Module):
+            raise RuntimeError(
+                "Class '{}' is not a PyTorch nn Module".format(type(model)._name_)
+            )
+
+        self.model = model
+        self.setter = setter
+        self.lmbd = bn_lambda
+
+        self.step(last_epoch + 1)
+        self.last_epoch = last_epoch
+
+    def step(self, epoch=None):
+        if epoch is None:
+            epoch = self.last_epoch + 1
+
+        self.last_epoch = epoch
+        self.model.apply(self.setter(self.lmbd(epoch)))
+
+    def state_dict(self):
+        return dict(last_epoch=self.last_epoch)
+
+    def load_state_dict(self, state):
+        self.last_epoch = state["last_epoch"]
+        self.step(self.last_epoch)
 
 
 def log_print(info, log_f=None):
@@ -48,9 +88,30 @@ def log_print(info, log_f=None):
     if log_f is not None:
         print(info, file=log_f)
 
+def configure_optimizers(config, global_step, model):
+    lr_clip = 1e-5
+    bnm_clip = 1e-2
+    lr_lbmd = lambda _: max(config.lr_decay** (int(global_step * config.batch_size / config.decay_step)),
+        lr_clip / config.lr,
+    )
+    bn_lbmd = lambda _: max(
+        config.bn_momentum
+        * config.bnm_decay
+        ** (int(global_step  * config.batch_size / config.decay_step)),
+        bnm_clip,
+    )
 
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=config.lr,
+        weight_decay=config.weight_decay,
+    )
+    lr_scheduler = lr_sched.LambdaLR(optimizer, lr_lambda=lr_lbmd)
+    bnm_scheduler = BNMomentumScheduler(model, bn_lambda=bn_lbmd)
 
-def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_it, tb_log, log_f):
+    return [optimizer], [lr_scheduler, bnm_scheduler]
+
+def train_one_epoch(model, train_loader, optimizer, lr_scheduler, epoch, total_it, tb_log, log_f):
     model.train()
     log_print('===============TRAIN EPOCH %d================' % epoch, log_f=log_f)
     loss_func = nn.CrossEntropyLoss()
@@ -62,11 +123,6 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
         pts_input = pts_input.cuda(non_blocking=True).float()
         cls_labels = cls_labels.cuda(non_blocking=True).long().view(-1)
 
-        
-
-        log = dict(train_loss=loss, train_acc=acc)
-
-
         pred_cls = model(pts_input)
 
         loss = F.cross_entropy(pred_cls, cls_labels)
@@ -77,16 +133,15 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
         total_it += 1
 
         with torch.no_grad():
-            acc = (torch.argmax(pred_cls, dim=1) == labels).float().mean()
+            acc = (torch.argmax(pred_cls, dim=1) == cls_labels).float().mean()
 
-        cur_lr = lr_scheduler.get_last_lr()[0]
-        tb_log.add_scalar('learning_rate', cur_lr, epoch)
         tb_log.add_scalar('train_loss', loss.item(), total_it)
         tb_log.add_scalar('train_acc', acc, total_it)
 
         if it % 500 == 0:
-            log_print('training epoch %d: it=%d/%d, total_it=%d, loss=%.5f, acc=%.3f, lr=%f' %
-                    (epoch, it, len(train_loader), total_it, loss.item(), acc, cur_lr), log_f=log_f)
+            log_print('training epoch %d: it=%d/%d, total_it=%d, loss=%.5f, acc=%.3f, lr=%.5f' %
+                    (epoch, it, len(train_loader), total_it, loss.item(), acc, lr_scheduler.get_last_lr()[0]), log_f=log_f)
+            lr_scheduler.step()
 
     return total_it
 
@@ -99,20 +154,18 @@ def eval_one_epoch(model, eval_loader, epoch, tb_log, log_f=None):
     acc_list = []
     loss_list = []
     for it, batch in enumerate(eval_loader):
-        pts_input, normals_input, cls_labels = batch
+        pts_input, cls_labels = batch
         pts_input = pts_input.cuda(non_blocking=True).float()
         cls_labels = cls_labels.cuda(non_blocking=True).long().view(-1)
 
         pred_cls = model(pts_input)
 
-        loss = loss_func(pred_cls, cls_labels)
+        loss = F.cross_entropy(pred_cls, cls_labels)
         loss_list.append(loss.item())
-        # calculate acc
-        pred_score = F.softmax(pred_cls, dim=1)
-        indices = torch.argmax(pred_score, 1)
-        acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
+        
+        acc = (torch.argmax(pred_cls, dim=1) == cls_labels).float().mean()
+        acc_list.append(acc.item())
 
-        acc_list.append(acc)
         if it % 100 == 0:
             log_print('EVAL: it=%d/%d, acc=%.3f' % (it, len(eval_loader), acc), log_f=log_f)
 
@@ -136,7 +189,7 @@ def test_one_epoch(model, test_loader, epoch, tb_log, log_f=None):
     y_preds = []
 
     for it, batch in enumerate(test_loader):
-        pts_input, normals_input, cls_labels = batch
+        pts_input, cls_labels = batch
 
         y_truths.append(cls_labels.numpy())
 
@@ -145,9 +198,7 @@ def test_one_epoch(model, test_loader, epoch, tb_log, log_f=None):
 
         pred_cls = model(pts_input)
 
-        pred_score = F.softmax(pred_cls, dim=1)
-        indices = torch.argmax(pred_score, 1)
-        # acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
+        indices = torch.argmax(pred_cls, dim=1)
 
         y_preds.append(indices.cpu().numpy())
 
@@ -163,13 +214,13 @@ def test_one_epoch(model, test_loader, epoch, tb_log, log_f=None):
     )
     conf_mat = 100.0 * conf_mat
 
-    with open(os.path.join("../data/resampled_KITTI/object_names.txt")) as f:
+    with open(os.path.join("./data/resampled_KITTI/object_names.txt")) as f:
         labels = [l.strip() for l in f.readlines()]
 
     plt.figure(figsize = (10, 10))
     sn.heatmap(conf_mat, annot=True, xticklabels=labels, yticklabels=labels)
     plt.title('KITTI 3D Object Classification -- Confusion Matrix')
-    plt.savefig('../output/confusion_matrix.png')
+    plt.savefig('./output/confusion_matrix.png')
     plt.show()
     
     print(
@@ -189,6 +240,7 @@ def save_checkpoint(model, epoch, ckpt_name):
     state = {'epoch': epoch, 'model_state': model_state}
     ckpt_name = '{}.pth'.format(ckpt_name)
     torch.save(state, ckpt_name)
+    log_print(f"save checkpoint to {ckpt_name}")
 
 
 def load_checkpoint(model, filename):
@@ -204,24 +256,15 @@ def load_checkpoint(model, filename):
     return epoch
 
 
-def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f):
+def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f, config):
     model.cuda()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-
-    def lr_lbmd(cur_epoch):
-        cur_decay = 1
-        for decay_step in args.decay_step_list:
-            if cur_epoch >= decay_step:
-                cur_decay = cur_decay * args.lr_decay
-        return max(cur_decay, args.lr_clip / args.lr)
-
-    lr_scheduler = lr_sched.LambdaLR(optimizer, lr_lbmd)
-
     total_it = 0
+    # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    [optimizer], [lr_scheduler, bnm_scheduler] = configure_optimizers(config, total_it, model)
+
     for epoch in range(1, args.epochs + 1):
         
-        total_it = train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_it, tb_log, log_f)
-        lr_scheduler.step(epoch)
+        total_it = train_one_epoch(model, train_loader, optimizer, lr_scheduler, epoch, total_it, tb_log, log_f)
 
         if epoch % args.ckpt_save_interval == 0:
             with torch.no_grad(): 
@@ -232,9 +275,9 @@ def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f):
 
 if __name__ == '__main__':
     
-    model = PointNet2ClassificationMSG(args)
+    model = PointNet2ClassificationMSG()
 
-    dataset_wrapper = KITTIPCDClsDataset_Wrapper('../data/resampled_KITTI', args)
+    dataset_wrapper = KITTIPCDClsDataset_Wrapper('./data/resampled_KITTI', args)
     train_loader, valid_loader, test_loader = dataset_wrapper.get_dataloader()
 
     if args.mode == 'train':
@@ -251,8 +294,11 @@ if __name__ == '__main__':
         for key, val in vars(args).items():
             log_print("{:16} {}".format(key, val), log_f=log_f)
 
+        if args.resume == 'true':
+            _ = load_checkpoint(model, args.ckpt)
+
         # train and eval
-        train_and_eval(model, train_loader, valid_loader, tb_log, ckpt_dir, log_f)
+        train_and_eval(model, train_loader, valid_loader, tb_log, ckpt_dir, log_f, args)
         log_f.close()
     elif args.mode == 'eval':
         epoch = load_checkpoint(model, args.ckpt)

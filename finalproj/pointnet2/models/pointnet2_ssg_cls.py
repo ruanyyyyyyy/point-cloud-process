@@ -7,8 +7,6 @@ from pointnet2_ops.pointnet2_modules import PointnetFPModule, PointnetSAModule
 from torch.utils.data import DataLoader, DistributedSampler
 from torchvision import transforms
 
-import pointnet2.data.data_utils as d_utils
-from pointnet2.data.ModelNet40Loader import ModelNet40Cls
 
 
 def set_bn_momentum_default(bn_momentum):
@@ -53,10 +51,8 @@ bnm_clip = 1e-2
 
 
 class PointNet2ClassificationSSG(pl.LightningModule):
-    def __init__(self, hparams):
+    def __init__(self):
         super().__init__()
-
-        self.hparams = hparams
 
         self._build_model()
 
@@ -157,74 +153,3 @@ class PointNet2ClassificationSSG(pl.LightningModule):
         )
 
         return reduced_outputs
-
-    def configure_optimizers(self):
-        lr_lbmd = lambda _: max(
-            self.hparams["optimizer.lr_decay"]
-            ** (
-                int(
-                    self.global_step
-                    * self.hparams["batch_size"]
-                    / self.hparams["optimizer.decay_step"]
-                )
-            ),
-            lr_clip / self.hparams["optimizer.lr"],
-        )
-        bn_lbmd = lambda _: max(
-            self.hparams["optimizer.bn_momentum"]
-            * self.hparams["optimizer.bnm_decay"]
-            ** (
-                int(
-                    self.global_step
-                    * self.hparams["batch_size"]
-                    / self.hparams["optimizer.decay_step"]
-                )
-            ),
-            bnm_clip,
-        )
-
-        optimizer = torch.optim.Adam(
-            self.parameters(),
-            lr=self.hparams["optimizer.lr"],
-            weight_decay=self.hparams["optimizer.weight_decay"],
-        )
-        lr_scheduler = lr_sched.LambdaLR(optimizer, lr_lambda=lr_lbmd)
-        bnm_scheduler = BNMomentumScheduler(self, bn_lambda=bn_lbmd)
-
-        return [optimizer], [lr_scheduler, bnm_scheduler]
-
-    def prepare_data(self):
-        train_transforms = transforms.Compose(
-            [
-                d_utils.PointcloudToTensor(),
-                d_utils.PointcloudScale(),
-                d_utils.PointcloudRotate(),
-                d_utils.PointcloudRotatePerturbation(),
-                d_utils.PointcloudTranslate(),
-                d_utils.PointcloudJitter(),
-                d_utils.PointcloudRandomInputDropout(),
-            ]
-        )
-
-        self.train_dset = ModelNet40Cls(
-            self.hparams["num_points"], transforms=train_transforms, train=True
-        )
-        self.val_dset = ModelNet40Cls(
-            self.hparams["num_points"], transforms=None, train=False
-        )
-
-    def _build_dataloader(self, dset, mode):
-        return DataLoader(
-            dset,
-            batch_size=self.hparams["batch_size"],
-            shuffle=mode == "train",
-            num_workers=4,
-            pin_memory=True,
-            drop_last=mode == "train",
-        )
-
-    def train_dataloader(self):
-        return self._build_dataloader(self.train_dset, mode="train")
-
-    def val_dataloader(self):
-        return self._build_dataloader(self.val_dset, mode="val")

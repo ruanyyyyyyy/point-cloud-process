@@ -43,8 +43,10 @@ class KITTIPCDClsDataset(Dataset):
         # format
         xyz = df_point_cloud_with_normal[['x', 'y', 'z']].values.astype(np.float32)
         normals = df_point_cloud_with_normal[['nx', 'ny', 'nz']].values.astype(np.float32)
+
+        pts = df_point_cloud_with_normal[['x', 'y', 'z', 'nx', 'ny', 'nz']].values.astype(np.float32)
         
-        return xyz, label_ind
+        return pts, label_ind
     
 
 
