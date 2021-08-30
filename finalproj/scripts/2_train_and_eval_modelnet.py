@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../'))
 from pointnet2_lib.tools.resampled_dataset import KITTIPCDClsDataset_Wrapper
-from pointnet2_lib.tools import pointnet2_msg_cls 
+import pointnet2
 import argparse
 import importlib
 from sklearn.metrics import classification_report, confusion_matrix
@@ -49,22 +49,6 @@ def log_print(info, log_f=None):
         print(info, file=log_f)
 
 
-class DiceLoss(nn.Module):
-    def __init__(self, ignore_target=-1):
-        super().__init__()
-        self.ignore_target = ignore_target
-
-    def forward(self, input, target):
-        """
-        :param input: (N), logit
-        :param target: (N), {0, 1}
-        :return:
-        """
-        input = torch.sigmoid(input.view(-1))
-        target = target.float().view(-1)
-        mask = (target != self.ignore_target).float()
-        return 1.0 - (torch.min(input, target) * mask).sum() / torch.clamp((torch.max(input, target) * mask).sum(), min=1.0)
-
 
 def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_it, tb_log, log_f):
     model.train()
@@ -73,24 +57,27 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
 
     for it, batch in enumerate(train_loader):
         optimizer.zero_grad()
-
-        pts_input, normals_input, cls_labels = batch
+        
+        pts_input, cls_labels = batch
         pts_input = pts_input.cuda(non_blocking=True).float()
         cls_labels = cls_labels.cuda(non_blocking=True).long().view(-1)
 
+        
+
+        log = dict(train_loss=loss, train_acc=acc)
+
+
         pred_cls = model(pts_input)
 
-        loss = loss_func(pred_cls, cls_labels)
+        loss = F.cross_entropy(pred_cls, cls_labels)
         loss.backward()
         clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
         total_it += 1
 
-        # calculate acc
-        pred_score = F.softmax(pred_cls, dim=1)
-        indices = torch.argmax(pred_score, 1)
-        acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
+        with torch.no_grad():
+            acc = (torch.argmax(pred_cls, dim=1) == labels).float().mean()
 
         cur_lr = lr_scheduler.get_last_lr()[0]
         tb_log.add_scalar('learning_rate', cur_lr, epoch)
@@ -244,8 +231,8 @@ def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f):
 
 
 if __name__ == '__main__':
-    MODEL = pointnet2_msg_cls # import network module
-    model = MODEL.get_model(input_channels=0)
+    
+    model = PointNet2ClassificationMSG(args)
 
     dataset_wrapper = KITTIPCDClsDataset_Wrapper('../data/resampled_KITTI', args)
     train_loader, valid_loader, test_loader = dataset_wrapper.get_dataloader()
