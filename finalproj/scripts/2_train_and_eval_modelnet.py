@@ -7,8 +7,8 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_sched
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
-import tensorboard_logger as tb_log
-from pointnet2_lib.tools.dataset import KittiDataset
+from torch.utils.tensorboard import SummaryWriter
+from pointnet2_lib.tools.resampled_dataset import KITTIPCDClsDataset_Wrapper
 import argparse
 import importlib
 
@@ -20,7 +20,7 @@ parser.add_argument('--workers', type=int, default=4)
 parser.add_argument("--mode", type=str, default='train')
 parser.add_argument("--ckpt", type=str, default='None')
 
-parser.add_argument("--net", type=str, default='pointnet2_msg')
+parser.add_argument("--net", type=str, default='pointnet2_msg_cls')
 
 parser.add_argument('--lr', type=float, default=0.002)
 parser.add_argument('--lr_decay', type=float, default=0.2)
@@ -62,12 +62,13 @@ class DiceLoss(nn.Module):
 def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_it, tb_log, log_f):
     model.train()
     log_print('===============TRAIN EPOCH %d================' % epoch, log_f=log_f)
-    loss_func = DiceLoss(ignore_target=-1)
+    loss_func = nn.CrossEntropyLoss()
 
     for it, batch in enumerate(train_loader):
         optimizer.zero_grad()
 
-        pts_input, cls_labels = batch['pts_input'], batch['cls_labels']
+        pts_input, normals_input, cls_labels = batch
+        # pts_input, cls_labels = batch['pts_input'], batch['cls_labels']
         pts_input = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
         cls_labels = torch.from_numpy(cls_labels).cuda(non_blocking=True).long().view(-1)
 
@@ -81,20 +82,18 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
 
         total_it += 1
 
-        pred_class = (torch.sigmoid(pred_cls) > FG_THRESH)
-        fg_mask = cls_labels > 0
-        correct = ((pred_class.long() == cls_labels) & fg_mask).float().sum()
-        union = fg_mask.sum().float() + (pred_class > 0).sum().float() - correct
-        iou = correct / torch.clamp(union, min=1.0)
+        # calculate acc
+        indices = torch.argmax(pred_cls, 1)
+        acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
 
         cur_lr = lr_scheduler.get_lr()[0]
-        tb_log.log_value('learning_rate', cur_lr, epoch)
+        tb_log.add_scalar('learning_rate', cur_lr, epoch)
         if tb_log is not None:
-            tb_log.log_value('train_loss', loss, total_it)
-            tb_log.log_value('train_fg_iou', iou, total_it)
+            tb_log.add_scalar('train_loss', loss.item(), total_it)
+            tb_log.add_scalar('train_acc', acc, total_it)
 
-        log_print('training epoch %d: it=%d/%d, total_it=%d, loss=%.5f, fg_iou=%.3f, lr=%f' %
-                  (epoch, it, len(train_loader), total_it, loss.item(), iou.item(), cur_lr), log_f=log_f)
+        log_print('training epoch %d: it=%d/%d, total_it=%d, loss=%.5f, acc=%.3f, lr=%f' %
+                  (epoch, it, len(train_loader), total_it, loss.item(), acc, cur_lr), log_f=log_f)
 
     return total_it
 
@@ -103,30 +102,29 @@ def eval_one_epoch(model, eval_loader, epoch, tb_log, log_f=None):
     model.train()
     log_print('===============EVAL EPOCH %d================' % epoch, log_f=log_f)
 
-    iou_list = []
+    acc_list = []
     for it, batch in enumerate(eval_loader):
-        pts_input, cls_labels = batch['pts_input'], batch['cls_labels']
+        pts_input, normals_input, cls_labels = batch
+        # pts_input, cls_labels = batch['pts_input'], batch['cls_labels']
         pts_input = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
         cls_labels = torch.from_numpy(cls_labels).cuda(non_blocking=True).long().view(-1)
 
         pred_cls = model(pts_input)
         pred_cls = pred_cls.view(-1)
 
-        pred_class = (torch.sigmoid(pred_cls) > FG_THRESH)
-        fg_mask = cls_labels > 0
-        correct = ((pred_class.long() == cls_labels) & fg_mask).float().sum()
-        union = fg_mask.sum().float() + (pred_class > 0).sum().float() - correct
-        iou = correct / torch.clamp(union, min=1.0)
+        # calculate acc
+        indices = torch.argmax(pred_cls, 1)
+        acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
 
-        iou_list.append(iou.item())
-        log_print('EVAL: it=%d/%d, iou=%.3f' % (it, len(eval_loader), iou), log_f=log_f)
+        acc_list.append(iou)
+        log_print('EVAL: it=%d/%d, acc=%.3f' % (it, len(eval_loader), acc), log_f=log_f)
 
-    iou_list = np.array(iou_list)
-    avg_iou = iou_list.mean()
-    tb_log.log_value('eval_fg_iou', avg_iou, epoch)
+    acc_list = np.array(acc_list)
+    avg_acc = acc_list.mean()
+    tb_log.add_scalar('eval_fg_acc', avg_acc, epoch)
 
-    log_print('\nEpoch %d: Average IoU (samples=%d): %.6f' % (epoch, iou_list.__len__(), avg_iou), log_f=log_f)
-    return avg_iou
+    log_print('\nEpoch %d: Average acc (samples=%d): %.6f' % (epoch, acc_list.__len__(), avg_acc), log_f=log_f)
+    return avg_acc
 
 
 def save_checkpoint(model, epoch, ckpt_name):
@@ -172,8 +170,8 @@ def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f):
         total_it = train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_it, tb_log, log_f)
 
         if epoch % args.ckpt_save_interval == 0:
-            with torch.no_grad():
-                avg_iou = eval_one_epoch(model, eval_loader, epoch, tb_log, log_f)
+            with torch.no_grad(): 
+                avg_acc = eval_one_epoch(model, eval_loader, epoch, tb_log, log_f)
                 ckpt_name = os.path.join(ckpt_dir, 'checkpoint_epoch_%d' % epoch)
                 save_checkpoint(model, epoch, ckpt_name)
 
@@ -182,21 +180,18 @@ if __name__ == '__main__':
     MODEL = importlib.import_module(args.net)  # import network module
     model = MODEL.get_model(input_channels=0)
 
-    eval_set = KittiDataset(root_dir='./data', mode='EVAL')
-    eval_loader = DataLoader(eval_set, batch_size=args.batch_size, shuffle=False, pin_memory=True,
-                             num_workers=args.workers, collate_fn=eval_set.collate_batch)
+    dataset_warpper = KITTIPCDClsDataset_Wrapper(root_dir='./data/resampled_KITTI', args)
+    train_loader, valid_loader, test_loader = dataset_wrapper.get_dataloader()
 
     if args.mode == 'train':
-        train_set = KittiDataset(root_dir='./data', mode='TRAIN')
-        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, pin_memory=True,
-                                  num_workers=args.workers, collate_fn=train_set.collate_batch)
         # output dir config
         output_dir = os.path.join(args.output_dir, args.extra_tag)
         os.makedirs(output_dir, exist_ok=True)
         tb_log.configure(os.path.join(output_dir, 'tensorboard'))
         ckpt_dir = os.path.join(output_dir, 'ckpt')
         os.makedirs(ckpt_dir, exist_ok=True)
-
+        tb_log = SummaryWriter()
+        # writer.add_graph(model)
         log_file = os.path.join(output_dir, 'log.txt')
         log_f = open(log_file, 'w')
 
@@ -204,13 +199,13 @@ if __name__ == '__main__':
             log_print("{:16} {}".format(key, val), log_f=log_f)
 
         # train and eval
-        train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f)
+        train_and_eval(model, train_loader, valid_loader, tb_log, ckpt_dir, log_f)
         log_f.close()
     elif args.mode == 'eval':
         epoch = load_checkpoint(model, args.ckpt)
         model.cuda()
         with torch.no_grad():
-            avg_iou = eval_one_epoch(model, eval_loader, epoch, log_f)
+            avg_acc = eval_one_epoch(model, valid_loader, epoch, log_f)
     else:
         raise NotImplementedError
 

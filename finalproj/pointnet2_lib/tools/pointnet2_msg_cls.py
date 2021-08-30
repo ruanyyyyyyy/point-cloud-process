@@ -5,7 +5,7 @@ import pointnet2_lib.pointnet2.pytorch_utils as pt_utils
 
 
 def get_model(input_channels=0):
-    return Pointnet2MSG(input_channels=input_channels)
+    return Pointnet2MSG_cls(input_channels=input_channels)
 
 
 NPOINTS = [4096, 1024, 256, 64]
@@ -18,7 +18,7 @@ CLS_FC = [128]
 DP_RATIO = 0.5
 
 
-class Pointnet2ClassificationMSG(nn.Module):
+class Pointnet2MSG_cls(nn.Module):
     def __init__(self, input_channels=6):
         super().__init__()
 
