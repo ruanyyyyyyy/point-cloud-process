@@ -1,4 +1,4 @@
-import pointnet2_lib.tools._init_path
+# import pointnet2_lib.tools._init_path
 import numpy as np
 import os
 import torch
@@ -7,10 +7,17 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_sched
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../'))
 from pointnet2_lib.tools.resampled_dataset import KITTIPCDClsDataset_Wrapper
+from pointnet2_lib.tools import pointnet2_msg_cls 
 import argparse
 import importlib
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sn
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser(description="Arg parser")
 parser.add_argument("--batch_size", type=int, default=8)
@@ -28,7 +35,7 @@ parser.add_argument('--lr_clip', type=float, default=0.000001)
 parser.add_argument('--decay_step_list', type=list, default=[50, 70, 80, 90])
 parser.add_argument('--weight_decay', type=float, default=0.001)
 
-parser.add_argument("--output_dir", type=str, default='output')
+parser.add_argument("--output_dir", type=str, default='../output')
 parser.add_argument("--extra_tag", type=str, default='default')
 
 args = parser.parse_args()
@@ -68,12 +75,10 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
         optimizer.zero_grad()
 
         pts_input, normals_input, cls_labels = batch
-        # pts_input, cls_labels = batch['pts_input'], batch['cls_labels']
-        pts_input = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
-        cls_labels = torch.from_numpy(cls_labels).cuda(non_blocking=True).long().view(-1)
+        pts_input = pts_input.cuda(non_blocking=True).float()
+        cls_labels = cls_labels.cuda(non_blocking=True).long().view(-1)
 
         pred_cls = model(pts_input)
-        pred_cls = pred_cls.view(-1)
 
         loss = loss_func(pred_cls, cls_labels)
         loss.backward()
@@ -83,17 +88,18 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
         total_it += 1
 
         # calculate acc
-        indices = torch.argmax(pred_cls, 1)
+        pred_score = F.softmax(pred_cls, dim=1)
+        indices = torch.argmax(pred_score, 1)
         acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
 
-        cur_lr = lr_scheduler.get_lr()[0]
+        cur_lr = lr_scheduler.get_last_lr()[0]
         tb_log.add_scalar('learning_rate', cur_lr, epoch)
-        if tb_log is not None:
-            tb_log.add_scalar('train_loss', loss.item(), total_it)
-            tb_log.add_scalar('train_acc', acc, total_it)
+        tb_log.add_scalar('train_loss', loss.item(), total_it)
+        tb_log.add_scalar('train_acc', acc, total_it)
 
-        log_print('training epoch %d: it=%d/%d, total_it=%d, loss=%.5f, acc=%.3f, lr=%f' %
-                  (epoch, it, len(train_loader), total_it, loss.item(), acc, cur_lr), log_f=log_f)
+        if it % 500 == 0:
+            log_print('training epoch %d: it=%d/%d, total_it=%d, loss=%.5f, acc=%.3f, lr=%f' %
+                    (epoch, it, len(train_loader), total_it, loss.item(), acc, cur_lr), log_f=log_f)
 
     return total_it
 
@@ -101,30 +107,90 @@ def train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_i
 def eval_one_epoch(model, eval_loader, epoch, tb_log, log_f=None):
     model.train()
     log_print('===============EVAL EPOCH %d================' % epoch, log_f=log_f)
+    loss_func = nn.CrossEntropyLoss()
 
     acc_list = []
+    loss_list = []
     for it, batch in enumerate(eval_loader):
         pts_input, normals_input, cls_labels = batch
-        # pts_input, cls_labels = batch['pts_input'], batch['cls_labels']
-        pts_input = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
-        cls_labels = torch.from_numpy(cls_labels).cuda(non_blocking=True).long().view(-1)
+        pts_input = pts_input.cuda(non_blocking=True).float()
+        cls_labels = cls_labels.cuda(non_blocking=True).long().view(-1)
 
         pred_cls = model(pts_input)
-        pred_cls = pred_cls.view(-1)
 
+        loss = loss_func(pred_cls, cls_labels)
+        loss_list.append(loss.item())
         # calculate acc
-        indices = torch.argmax(pred_cls, 1)
+        pred_score = F.softmax(pred_cls, dim=1)
+        indices = torch.argmax(pred_score, 1)
         acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
 
-        acc_list.append(iou)
-        log_print('EVAL: it=%d/%d, acc=%.3f' % (it, len(eval_loader), acc), log_f=log_f)
+        acc_list.append(acc)
+        if it % 100 == 0:
+            log_print('EVAL: it=%d/%d, acc=%.3f' % (it, len(eval_loader), acc), log_f=log_f)
 
     acc_list = np.array(acc_list)
     avg_acc = acc_list.mean()
-    tb_log.add_scalar('eval_fg_acc', avg_acc, epoch)
+    tb_log.add_scalar('eval_acc', avg_acc, epoch)
+
+    loss_list = np.array(loss_list)
+    avg_loss = loss_list.mean()
+    tb_log.add_scalar('eval_loss', avg_loss, epoch)
 
     log_print('\nEpoch %d: Average acc (samples=%d): %.6f' % (epoch, acc_list.__len__(), avg_acc), log_f=log_f)
     return avg_acc
+
+def test_one_epoch(model, test_loader, epoch, tb_log, log_f=None):
+    model.train()
+    log_print('===============TEST EPOCH %d================' % epoch, log_f=log_f)
+    loss_func = nn.CrossEntropyLoss()
+
+    y_truths = []
+    y_preds = []
+
+    for it, batch in enumerate(test_loader):
+        pts_input, normals_input, cls_labels = batch
+
+        y_truths.append(cls_labels.numpy())
+
+        pts_input = pts_input.cuda(non_blocking=True).float()
+        cls_labels = cls_labels.cuda(non_blocking=True).long().view(-1)
+
+        pred_cls = model(pts_input)
+
+        pred_score = F.softmax(pred_cls, dim=1)
+        indices = torch.argmax(pred_score, 1)
+        # acc = (indices == cls_labels).sum().item()/cls_labels.size()[0]
+
+        y_preds.append(indices.cpu().numpy())
+
+    y_truth = np.hstack(y_truths)
+    y_pred = np.hstack(y_preds)
+    
+    # get confusion matrix
+    conf_mat = confusion_matrix(y_truth, y_pred)
+    # change to percentage:
+    conf_mat = np.dot(
+        np.diag(1.0 / conf_mat.sum(axis=1)),
+        conf_mat
+    )
+    conf_mat = 100.0 * conf_mat
+
+    with open(os.path.join("../data/resampled_KITTI/object_names.txt")) as f:
+        labels = [l.strip() for l in f.readlines()]
+
+    plt.figure(figsize = (10, 10))
+    sn.heatmap(conf_mat, annot=True, xticklabels=labels, yticklabels=labels)
+    plt.title('KITTI 3D Object Classification -- Confusion Matrix')
+    plt.savefig('../output/confusion_matrix.png')
+    plt.show()
+    
+    print(
+		classification_report(
+			y_truth, y_pred, 
+			target_names=labels
+		)
+	)    
 
 
 def save_checkpoint(model, epoch, ckpt_name):
@@ -166,8 +232,9 @@ def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f):
 
     total_it = 0
     for epoch in range(1, args.epochs + 1):
-        lr_scheduler.step(epoch)
+        
         total_it = train_one_epoch(model, train_loader, optimizer, epoch, lr_scheduler, total_it, tb_log, log_f)
+        lr_scheduler.step(epoch)
 
         if epoch % args.ckpt_save_interval == 0:
             with torch.no_grad(): 
@@ -177,21 +244,20 @@ def train_and_eval(model, train_loader, eval_loader, tb_log, ckpt_dir, log_f):
 
 
 if __name__ == '__main__':
-    MODEL = importlib.import_module(args.net)  # import network module
+    MODEL = pointnet2_msg_cls # import network module
     model = MODEL.get_model(input_channels=0)
 
-    dataset_warpper = KITTIPCDClsDataset_Wrapper(root_dir='./data/resampled_KITTI', args)
+    dataset_wrapper = KITTIPCDClsDataset_Wrapper('../data/resampled_KITTI', args)
     train_loader, valid_loader, test_loader = dataset_wrapper.get_dataloader()
 
     if args.mode == 'train':
         # output dir config
         output_dir = os.path.join(args.output_dir, args.extra_tag)
         os.makedirs(output_dir, exist_ok=True)
-        tb_log.configure(os.path.join(output_dir, 'tensorboard'))
         ckpt_dir = os.path.join(output_dir, 'ckpt')
         os.makedirs(ckpt_dir, exist_ok=True)
-        tb_log = SummaryWriter()
-        # writer.add_graph(model)
+        tb_log = SummaryWriter('../runs')
+
         log_file = os.path.join(output_dir, 'log.txt')
         log_f = open(log_file, 'w')
 
@@ -206,6 +272,12 @@ if __name__ == '__main__':
         model.cuda()
         with torch.no_grad():
             avg_acc = eval_one_epoch(model, valid_loader, epoch, log_f)
+    elif args.mode == 'test':
+        epoch = load_checkpoint(model, args.ckpt)
+        model.cuda()
+        with torch.no_grad():
+            avg_acc = test_one_epoch(model, valid_loader, epoch, log_f)
+        
     else:
         raise NotImplementedError
 

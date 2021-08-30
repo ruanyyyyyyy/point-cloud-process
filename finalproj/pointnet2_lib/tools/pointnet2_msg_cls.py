@@ -68,6 +68,7 @@ class Pointnet2MSG_cls(nn.Module):
                 nn.BatchNorm1d(512),
                 nn.ReLU(True),
                 nn.Linear(512, 256, bias=False),
+                nn.BatchNorm1d(256),
                 nn.ReLU(True),
                 nn.Dropout(0.5),
                 nn.Linear(256, 4),
@@ -100,6 +101,10 @@ class Pointnet2MSG_cls(nn.Module):
         # pred_cls = self.cls_layer(l_features[0]).transpose(1, 2).contiguous()  # (B, N, 1)
 
         # classification
-        global_feat, _ = torch.max(l_features[-1], -1)
-        pred_cls = self.fc_layer(global_feat)
+        # global_feat, _ = torch.max(l_features[-1], -1)
+        print(l_features[-1].shape)
+        print(l_features[-1].squeeze(-1).shape)
+        print(l_features[-1].view(8, 1024)) 
+        input()
+        pred_cls = self.fc_layer(l_features[-1].squeeze(-1)) # l_features[-1].view(B, 1024) (8, 1024, 64)
         return pred_cls # (B, 4)
