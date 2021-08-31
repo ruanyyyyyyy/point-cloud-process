@@ -15,16 +15,17 @@
                     "--epochs", "100",
                     "--ckpt_save_interval", "2"]       
         },
+
         {
-            "name": "train_and_eval_modelnet",
+            "name": "detect",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/2_train_and_eval_modelnet.py",
+            "program": "${workspaceFolder}/scripts/detect.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
-            "args": ["--batch_size", "8",
-                    "--epochs", "100",
-                    "--ckpt_save_interval", "2"]       
+            "args": ["-i", "./data",
+                    "-c", "output/default/ckpt/checkpoint_epoch_80.pth",
+                    ]       
         }
     ]
 }

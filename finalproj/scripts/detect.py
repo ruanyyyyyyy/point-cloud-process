@@ -404,9 +404,9 @@ def detect(
     debug_mode, ckpt
 ):
     # 0. generate I/O paths:
-    input_velodyne = os.path.join(dataset_dir, 'velodyne', f'{index:06d}.bin')
-    input_params = os.path.join(dataset_dir, 'calib', f'{index:06d}.txt')
-    output_label = os.path.join(dataset_dir, 'shenlan_pipeline_pred_2', 'data', f'{index:06d}.txt')
+    input_velodyne = os.path.join(dataset_dir, 'KITTI', 'training', 'velodyne', f'{index:06d}.bin')
+    input_params = os.path.join(dataset_dir, 'KITTI', 'training', 'calib', f'{index:06d}.txt')
+    output_label = os.path.join(dataset_dir, 'result_KITTI', f'{index:06d}.txt')
 
     # 1. read Velodyne measurements and calib params:
     point_cloud = read_velodyne_bin(input_velodyne)
@@ -480,7 +480,7 @@ def get_arguments():
         required=True, type=str
     )
     required.add_argument(
-        "-ckpt", dest="ckpt", help="Checkpoint path.",
+        "-c", dest="ckpt", help="Checkpoint path.",
         required=True, type=str
     )
 
@@ -507,7 +507,7 @@ if __name__ == "__main__":
 
     for label in progressbar.progressbar(
         glob.glob(
-            os.path.join(args.input, 'shenlan_pipeline_label_2', '*.txt')
+            os.path.join(args.input, 'KITTI', 'training', 'label_2', '*.txt')
         )
     ):
         # get index:
