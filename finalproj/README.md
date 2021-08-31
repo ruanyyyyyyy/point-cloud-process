@@ -8,6 +8,9 @@ All the codes are tested in the following environment:
 - PyTorch 1.8.1
 - cuda 11.2
 
+Credit to AlexGeControl https://github.com/AlexGeControl/3D-Point-Cloud-Analytics/tree/master/workspace/assignments/project-01-kitti-detection-pipeline
+This repo refers lots of scripts in the above link.
+
 # Build Object Classification Dataset from KITTI 3D Object
 
 ## KITTI dataset
