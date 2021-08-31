@@ -373,20 +373,30 @@ def predict(segmented_objects, object_ids, model, config):
     model.cuda()
     model.eval()
 
-    for pts, label in dataset:
+    dset_size = len(dataset)
+    index_list = list(range(dset_size)) # not in train stage. Don't need to shuffle index
+
+    batch_num = int(dset_size // config["batch_size"])
+    dataset = np.asarray(dataset)
+    for idx in range(batch_num):
+        batch_index = index_list[idx*config["batch_size"]: (idx+1)*config["batch_size"]]
+        batch_data = dataset[batch_index]
+
+        pts, object_ids = list(zip(*(batch_data)))
+
+        pts = np.stack(pts, axis=0)
+    
         pts = torch.from_numpy(pts).cuda(non_blocking=True).float()
-        pts = pts.unsqueeze(0)
 
         with torch.no_grad():
             # predict:
             prob_preds = model(pts)
-            ids = label
         
-        prob_score = F.softmax(prob_preds).cpu().numpy()
+        prob_score = F.softmax(prob_preds, dim=1).cpu().numpy()
         # add to prediction:
         for (object_id, class_id, confidence) in zip(
             # object ID: 
-            ids, 
+            object_ids, 
             # category:
             np.argmax(prob_score, axis=1),
             # confidence:
@@ -402,14 +412,14 @@ def predict(segmented_objects, object_ids, model, config):
     return predictions
 
 def detect(
-    dataset_dir, index,
+    model, dataset_dir, index,
     max_radius_distance, num_sample_points,
     debug_mode, ckpt
 ):
     # 0. generate I/O paths:
     input_velodyne = os.path.join(dataset_dir, 'KITTI', 'object', 'training', 'velodyne', f'{index:06d}.bin')
     input_params = os.path.join(dataset_dir, 'KITTI', 'object', 'training', 'calib', f'{index:06d}.txt')
-    output_label = os.path.join(dataset_dir, 'result_KITTI', f'{index:06d}.txt')
+    output_label = os.path.join('output', 'result_KITTI', f'{index:06d}.txt')
 
     # 1. read Velodyne measurements and calib params:
     point_cloud = read_velodyne_bin(input_velodyne)
@@ -425,19 +435,16 @@ def detect(
         'num_sample_points': num_sample_points,
         # predict:
         'msg' : True,
-        'batch_size' : 16,
+        'batch_size' : 8,
         'num_classes' : 4,
         'batch_normalization' : False,
         'checkpoint_path' : 'logs/msg_1/model/weights.ckpt',
     }
-    model = PointNet2ClassificationMSG()
-    epoch = load_checkpoint(model, ckpt)
+    
     predictions = predict(segmented_objects, object_ids, model, config)
 
     with open(os.path.join('./data/resampled_KITTI/object_names.txt')) as f:
         file_labels = [l.strip() for l in f.readlines()]
-        
-        label2ind = {label: ind for ind, label in enumerate(file_labels)}
         ind2label = {ind: label for ind, label in enumerate(file_labels)}
 
     # debug mode:
@@ -507,6 +514,11 @@ def get_arguments():
 if __name__ == "__main__":
     # parse command line arguments
     args = get_arguments()
+    output_dir = os.path.join('output', 'result_KITTI')
+    os.makedirs(output_dir, exist_ok=True)
+
+    model = PointNet2ClassificationMSG()
+    epoch = load_checkpoint(model, args.ckpt)
 
     for label in progressbar.progressbar(
         glob.glob(
@@ -522,6 +534,7 @@ if __name__ == "__main__":
 
         # perform object detection:
         detect(
+            model,
             args.input, index,
             args.max_radius_distance, args.num_sample_points,
             args.debug_mode, args.ckpt
