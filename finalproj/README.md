@@ -228,3 +228,12 @@ The corresponding Python implementation is shown below:
     )
     label.to_csv(output_label, sep=' ', header=False, index=False)
 ```
+
+## Evaluation
+
+Use this kitti eval tool: https://github.com/prclibo/kitti_eval/blob/955c04c4afc4cbc85638fb1e7b237068415c1d05/evaluate_object_3d_offline.cpp
+```
+ ./evaluate_object_3d_offline /local-scratch/yuer/projects/pc_asgn/finalproj/data/KITTI/object/training/label_2 /local-scratch/yuer/projects/pc_asgn/finalproj/output/final_results
+```
+Note that make sure `final_results` has a subdirectory named `data` where store all the txt files.
+The eval results would also be put in `final_results`, including `plot` folder and those statistics txt.

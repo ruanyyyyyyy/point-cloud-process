@@ -419,7 +419,7 @@ def detect(
     # 0. generate I/O paths:
     input_velodyne = os.path.join(dataset_dir, 'KITTI', 'object', 'training', 'velodyne', f'{index:06d}.bin')
     input_params = os.path.join(dataset_dir, 'KITTI', 'object', 'training', 'calib', f'{index:06d}.txt')
-    output_label = os.path.join('output', 'result_KITTI', f'{index:06d}.txt')
+    output_label = os.path.join('output', 'final_results', 'data', f'{index:06d}.txt')
 
     # 1. read Velodyne measurements and calib params:
     point_cloud = read_velodyne_bin(input_velodyne)
