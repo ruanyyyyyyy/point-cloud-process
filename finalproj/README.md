@@ -40,16 +40,28 @@ model = MODEL.get_model(input_channels=0)
 Note that `pointnet2_msg_sem.py` is in the original github repo. I modified its forward function in it and got `pointnet2_msg_cls` for classification task.
 
 ## Training object classification network
+
 Run the following commands to train the network on the resampled dataset:
 
 ```bash
-cd scripts
-python 2_train_and_eval_modelnet.py
+python pointnet2/train.py --ckpt_save_interval 2 --epochs 20
+```
+
+After 20 epochs the network can achieve 0.92 accuracy on validation dataset
+
+Resume from previous ckpt
+```
+python pointnet2/train.py --ckpt_save_interval 2 --epochs 40 --resume true --ckpt output/default/ckpt/checkpoint_epoch_20.pth --lr 0.00016
 ```
 
 Visualizae training loss on Tensorboard
 ```
 tensorboard --logdir=runs
 ```
-After this the traning loss can be monitored inside local browser 
+After this the traning loss can be monitored inside local browser
 
+Generate confusion matrix and the classification report from sklearn
+```
+python pointnet2/train.py --mode test --ckpt output/default/ckpt/checkpoint_epoch_20.pth
+```
+Confusion matrix png is stored in `./output/confusion_matrix.png`. The classification report is stored in `./output/default/test/log.txt`

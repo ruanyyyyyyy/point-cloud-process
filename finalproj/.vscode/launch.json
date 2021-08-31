@@ -24,7 +24,18 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "args": ["-i", "./data",
-                    "-c", "output/default/ckpt/checkpoint_epoch_80.pth",
+                    "-c", "output/default/ckpt/checkpoint_epoch_20.pth",
+                    ]       
+        },
+
+        {
+            "name": "train",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/pointnet2/train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": ["--mode", "test", "--ckpt", "output/default/ckpt/checkpoint_epoch_20.pth",
                     ]       
         }
     ]
