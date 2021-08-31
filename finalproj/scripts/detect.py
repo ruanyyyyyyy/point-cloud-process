@@ -29,6 +29,9 @@ import torch.nn.functional as F
 from pointnet2.data.resampled_dataset import KITTIPCDClsDataset_Wrapper
 
 from scripts.transform_coords_utils import transform_to_cam, transform_to_pixel
+from pointnet2.models.pointnet2_msg_cls import PointNet2ClassificationMSG
+
+import pandas as pd
 
 def get_orientation_in_camera_frame(X_cam_centered):
     """
@@ -398,7 +401,7 @@ def predict(segmented_objects, object_ids, model, config):
 def detect(
     dataset_dir, index,
     max_radius_distance, num_sample_points,
-    debug_mode
+    debug_mode, ckpt
 ):
     # 0. generate I/O paths:
     input_velodyne = os.path.join(dataset_dir, 'velodyne', f'{index:06d}.bin')
@@ -424,7 +427,8 @@ def detect(
         'batch_normalization' : False,
         'checkpoint_path' : 'logs/msg_1/model/weights.ckpt',
     }
-    model = load_model(config)
+    model = PointNet2ClassificationMSG()
+    model = load_checkpoint(model, ckpt)
     predictions = predict(segmented_objects, object_ids, model, config)
 
     with open(os.path.join('./data/resampled_KITTI/object_names.txt')) as f:
@@ -475,6 +479,10 @@ def get_arguments():
         "-i", dest="input", help="Input path.",
         required=True, type=str
     )
+    required.add_argument(
+        "-ckpt", dest="ckpt", help="Checkpoint path.",
+        required=True, type=str
+    )
 
     optional.add_argument(
         "-d", dest="debug_mode", help="When enabled, visualize the result. Defaults to False. \n",
@@ -513,5 +521,5 @@ if __name__ == "__main__":
         detect(
             args.input, index,
             args.max_radius_distance, args.num_sample_points,
-            args.debug_mode
+            args.debug_mode, args.ckpt
         )

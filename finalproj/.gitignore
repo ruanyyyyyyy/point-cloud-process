@@ -9,3 +9,8 @@
 *.png
 **/*.egg-info
 **/dist
+
+runs/
+output/
+
+*.pyc

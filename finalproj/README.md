@@ -49,7 +49,7 @@ python 2_train_and_eval_modelnet.py
 
 Visualizae training loss on Tensorboard
 ```
-tensorboard --logdir=runs --bind_all --port=6006
+tensorboard --logdir=runs
 ```
-After this the traning loss can be monitored inside local browser at http://localhost:46006/
+After this the traning loss can be monitored inside local browser 
 
