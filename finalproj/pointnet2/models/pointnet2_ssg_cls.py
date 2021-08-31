@@ -90,7 +90,7 @@ class PointNet2ClassificationSSG(pl.LightningModule):
             nn.BatchNorm1d(256),
             nn.ReLU(True),
             nn.Dropout(0.5),
-            nn.Linear(256, 40),
+            nn.Linear(256, 4),
         )
 
     def _break_up_pc(self, pc):

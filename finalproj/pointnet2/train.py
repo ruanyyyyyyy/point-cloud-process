@@ -84,7 +84,7 @@ def train_one_epoch(model, train_loader, optimizer, lr_scheduler, epoch, total_i
 
 
 def eval_one_epoch(model, eval_loader, epoch, tb_log, log_f=None):
-    model.train()
+    model.eval()
     log_print('===============EVAL EPOCH %d================' % epoch, log_f=log_f)
     loss_func = nn.CrossEntropyLoss()
 
@@ -118,7 +118,7 @@ def eval_one_epoch(model, eval_loader, epoch, tb_log, log_f=None):
     return avg_acc
 
 def test_one_epoch(model, test_loader, epoch, log_f=None):
-    model.train()
+    model.eval()
     log_print('===============TEST EPOCH %d================' % epoch, log_f=log_f)
     loss_func = nn.CrossEntropyLoss()
 

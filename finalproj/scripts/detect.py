@@ -12,7 +12,8 @@ import sys
 import progressbar
 import datetime
 
-sys.path.insert(0, './')
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../'))
 # disable TF log display:
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -369,10 +370,12 @@ def predict(segmented_objects, object_ids, model, config):
         class_id: {} for class_id in range(config['num_classes'])
     }
     num_predicted = 0
+    model.cuda()
+    model.eval()
 
     for pts, label in dataset:
-        pts, labels = np.asarray(pts), np.asarray(labels)
         pts = torch.from_numpy(pts).cuda(non_blocking=True).float()
+        pts = pts.unsqueeze(0)
 
         with torch.no_grad():
             # predict:
@@ -404,8 +407,8 @@ def detect(
     debug_mode, ckpt
 ):
     # 0. generate I/O paths:
-    input_velodyne = os.path.join(dataset_dir, 'KITTI', 'training', 'velodyne', f'{index:06d}.bin')
-    input_params = os.path.join(dataset_dir, 'KITTI', 'training', 'calib', f'{index:06d}.txt')
+    input_velodyne = os.path.join(dataset_dir, 'KITTI', 'object', 'training', 'velodyne', f'{index:06d}.bin')
+    input_params = os.path.join(dataset_dir, 'KITTI', 'object', 'training', 'calib', f'{index:06d}.txt')
     output_label = os.path.join(dataset_dir, 'result_KITTI', f'{index:06d}.txt')
 
     # 1. read Velodyne measurements and calib params:
@@ -428,7 +431,7 @@ def detect(
         'checkpoint_path' : 'logs/msg_1/model/weights.ckpt',
     }
     model = PointNet2ClassificationMSG()
-    model = load_checkpoint(model, ckpt)
+    epoch = load_checkpoint(model, ckpt)
     predictions = predict(segmented_objects, object_ids, model, config)
 
     with open(os.path.join('./data/resampled_KITTI/object_names.txt')) as f:
@@ -507,7 +510,7 @@ if __name__ == "__main__":
 
     for label in progressbar.progressbar(
         glob.glob(
-            os.path.join(args.input, 'KITTI', 'training', 'label_2', '*.txt')
+            os.path.join(args.input, 'KITTI', 'object', 'training', 'label_2', '*.txt')
         )
     ):
         # get index:
