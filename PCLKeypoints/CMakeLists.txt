@@ -18,15 +18,15 @@ INCLUDE_DIRECTORIES(
     ${MY_HEADERS}
 )
 
-#add_executable(test_pcl_keypoint
-#    src/main.cpp
-#    src/keypoints.cpp
-#    ${MY_HEADERS}
-#)
+add_executable(test_pcl_keypoint
+   src/main.cpp
+   src/keypoints.cpp
+   ${MY_HEADERS}
+)
 
-#target_link_libraries(test_pcl_keypoint
+# target_link_libraries(test_pcl_keypoint
 #    ${PCL_LIBRARIES}
-#)
+# )
 
 pybind11_add_module(${PROJECT_NAME}
     src/keypoints.cpp
