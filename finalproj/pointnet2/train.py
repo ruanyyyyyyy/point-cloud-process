@@ -160,11 +160,11 @@ def test_one_epoch(model, test_loader, epoch, log_f=None):
     plt.savefig('./output/confusion_matrix.png')
     # plt.show()
     
-    print(
+    log_print(
 		classification_report(
 			y_truth, y_pred, 
 			target_names=labels
-		)
+		), log_f
 	)    
 
 
@@ -249,10 +249,17 @@ if __name__ == '__main__':
         with torch.no_grad():
             avg_acc = eval_one_epoch(model, valid_loader, epoch)
     elif args.mode == 'test':
+        output_test_dir = os.path.join(args.output_dir, args.extra_tag, 'test')
+        os.makedirs(output_test_dir, exist_ok=True)
+        log_file = os.path.join(output_test_dir, 'log.txt')
+        log_f = open(log_file, 'w')
+
         epoch = load_checkpoint(model, args.ckpt)
         model.cuda()
         with torch.no_grad():
-            avg_acc = test_one_epoch(model, test_loader, epoch)
+            avg_acc = test_one_epoch(model, test_loader, epoch, log_f)
+        
+        log_f.close()
         
     else:
         raise NotImplementedError
