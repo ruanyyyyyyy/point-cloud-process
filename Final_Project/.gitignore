@@ -9,6 +9,8 @@
 *.png
 **/*.egg-info
 **/dist
-scripts/gt_database/
 
 runs/
+output/
+
+*.pyc

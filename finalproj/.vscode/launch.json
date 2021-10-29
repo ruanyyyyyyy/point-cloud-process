@@ -1,0 +1,42 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": ["--batch_size", "8",
+                    "--epochs", "100",
+                    "--ckpt_save_interval", "2"]       
+        },
+
+        {
+            "name": "detect",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/detect.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": ["-i", "./data",
+                    "-c", "output/default/ckpt/checkpoint_epoch_20.pth",
+                    ]       
+        },
+
+        {
+            "name": "train",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/pointnet2/train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": ["--mode", "test", "--ckpt", "output/default/ckpt/checkpoint_epoch_20.pth",
+                    ]       
+        }
+    ]
+}
