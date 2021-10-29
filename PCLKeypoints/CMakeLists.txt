@@ -8,7 +8,7 @@ find_package(Eigen3)
 find_package(PCL 1.8)
 
 set(MY_HEADERS
-    ${EIGEN3_INCLUDE_DIR}
+    ${EIGEN3_INCLUDE_DIR}0
     ${PCL_INCLUDE_DIRS}
     src/utils.hpp
     src/keypoints.hpp

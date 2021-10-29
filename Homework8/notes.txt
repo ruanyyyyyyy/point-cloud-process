@@ -1,7 +1,0 @@
-Notes: 
-
-Open3d 的可视化结果
-按h 会在terminal 出现帮助信息， 有很多交互选项
-按p  会capture image 出现一个 image 和一个 json file， 记录camera的相关信息，可以通过vis.load render option 相关的函数加载回来
-https://www.cnblogs.com/yibeimingyue/p/13863529.html
-

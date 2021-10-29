@@ -1,6 +1,9 @@
 [submodule "Homework6/PointRCNN"]
 	path = Homework6/PointRCNN
-	url = git@github.com:ruanyyyyyyy/PointRCNN.git
+	url = https://github.com/sshaoshuai/PointRCNN.git
 [submodule "Homework6/kitti_eval"]
 	path = Homework6/kitti_eval
 	url = https://github.com/prclibo/kitti_eval.git
+[submodule "ObjectDetection_Kitti/PointRCNN"]
+	path = ObjectDetection_Kitti/PointRCNN
+	url = https://github.com/sshaoshuai/PointRCNN.git
